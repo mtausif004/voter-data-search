@@ -8,11 +8,20 @@
     "start": "next start"
   },
   "dependencies": {
-    "next": "14.2.5",
+    "next": "^14.2.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tesseract.js": "^5.1.0",
     "pdfjs-dist": "^4.7.76",
     "lucide-react": "^0.441.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.5.3"
   }
 }

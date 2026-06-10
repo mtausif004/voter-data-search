@@ -29,7 +29,7 @@ export default function VoterSearch() {
 
   const processPDF = async (file: File) => {
     setIsProcessing(true);
-    setProgress(`প্রসেস হচ্ছে: ${file.name}`);
+    setProgress(`প্রসেস হচ্ছে: ${file.name} (${(file.size/1024/1024).toFixed(1)} MB)`);
 
     try {
       const pdfjs = await import('pdfjs-dist');
@@ -41,23 +41,26 @@ export default function VoterSearch() {
       let fullText = '';
 
       for (let i = 1; i <= pdf.numPages; i++) {
-        setProgress(`পেজ ${i}/${pdf.numPages} চলছে...`);
+        setProgress(`পেজ ${i} / ${pdf.numPages} প্রসেস হচ্ছে...`);
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
-        fullText += textContent.items.map((item: any) => item.str).join(' ') + '\n\n';
+        fullText += textContent.items.map((item: any) => (item.str || '')).join(' ') + '\n';
       }
 
-      // Basic parsing for Bengali voter list
-      const newVoters: Voter[] = [];
+      // আরও শক্তিশালী পার্সিং
       const lines = fullText.split('\n');
+      const newVoters: Voter[] = [];
 
-      lines.forEach((line, idx) => {
-        const nameMatch = line.match(/নাম[:\s]*([^\n]+)/i);
+      for (let line of lines) {
+        line = line.trim();
+        if (!line) continue;
+
+        const nameMatch = line.match(/নাম[:\s]*([^\n\u0964]+)/i);
         const voterNoMatch = line.match(/ভোটার নং[:\s]*([০-৯]+)/i);
 
-        if (nameMatch && nameMatch[1].trim().length > 2) {
+        if (nameMatch && nameMatch[1] && nameMatch[1].trim().length > 2) {
           newVoters.push({
-            id: Date.now() + '-' + idx,
+            id: Date.now() + Math.random().toString(),
             name: nameMatch[1].trim(),
             voterNo: voterNoMatch ? voterNoMatch[1] : 'N/A',
             father: 'পিতা তথ্য পাওয়া যায়নি',
@@ -65,17 +68,17 @@ export default function VoterSearch() {
             pdfName: file.name
           });
         }
-      });
+      }
 
       if (newVoters.length > 0) {
         setVoters(prev => [...prev, ...newVoters]);
-        setProgress(`${newVoters.length} জন ভোটার যোগ হয়েছে`);
+        setProgress(`✅ ${newVoters.length} জন ভোটার সফলভাবে যোগ হয়েছে`);
       } else {
-        setProgress('কোনো ভোটার তথ্য পাওয়া যায়নি। অন্য PDF চেষ্টা করুন।');
+        setProgress('⚠️ কোনো তথ্য পাওয়া যায়নি। অন্য PDF চেষ্টা করুন বা ছবি ক্লিয়ার করে আপলোড করুন।');
       }
     } catch (err) {
       console.error(err);
-      alert('PDF প্রসেস করতে সমস্যা হয়েছে। অন্য একটা PDF চেষ্টা করুন।');
+      setProgress('❌ PDF প্রসেস করতে বড় সমস্যা হয়েছে। অন্য ছোট PDF চেষ্টা করুন।');
     }
 
     setIsProcessing(false);
@@ -95,10 +98,10 @@ export default function VoterSearch() {
 
         <div className="bg-white rounded-2xl shadow p-8 text-center mb-8">
           <Upload className="w-16 h-16 mx-auto mb-4 text-blue-600" />
-          <p className="mb-6">ভোটার লিস্টের PDF আপলোড করুন</p>
+          <p className="mb-6 text-lg">ভোটার লিস্টের PDF আপলোড করুন</p>
           
-          <label className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl inline-block text-lg">
-            PDF আপলোড করুন
+          <label className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-10 py-5 rounded-xl text-lg inline-block">
+            📄 PDF আপলোড করুন
             <input
               type="file"
               accept="application/pdf"
@@ -111,36 +114,35 @@ export default function VoterSearch() {
           </label>
         </div>
 
-        {isProcessing && (
-          <div className="bg-blue-50 p-6 rounded-xl text-center mb-6 font-medium">
-            {progress}
-          </div>
-        )}
+        {isProcessing && <div className="bg-yellow-50 p-6 rounded-xl text-center mb-6 font-medium">{progress}</div>}
 
-        <div className="relative mb-6">
+        <div className="mb-6">
           <input
             type="text"
             placeholder="নাম বা ভোটার নং দিয়ে সার্চ করুন..."
-            className="w-full pl-5 pr-4 py-4 rounded-2xl border text-lg"
+            className="w-full px-5 py-4 rounded-2xl border text-lg"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
 
-        <div className="flex justify-between mb-4">
-          <h2>মোট ভোটার: {voters.length}</h2>
-          <button onClick={() => {setVoters([]); localStorage.clear();}} className="text-red-600 flex items-center gap-1">
-            <Trash2 size={18} /> সব মুছে ফেলুন
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-semibold">মোট ভোটার: {voters.length}</h2>
+          <button 
+            onClick={() => { if(confirm('সব ডাটা মুছে ফেলবেন?')) {setVoters([]); localStorage.clear();} }}
+            className="text-red-600 flex items-center gap-2"
+          >
+            <Trash2 /> সব মুছে ফেলুন
           </button>
         </div>
 
         <div className="space-y-4">
           {filtered.map(v => (
-            <div key={v.id} className="bg-white p-5 rounded-2xl shadow">
-              <p className="text-xl font-bold">{v.name}</p>
-              <p className="text-lg font-mono mt-1">{v.voterNo}</p>
-              <p className="text-sm text-gray-600 mt-2">{v.father}</p>
-              <p className="text-xs text-gray-400 mt-3">ফাইল: {v.pdfName}</p>
+            <div key={v.id} className="bg-white p-6 rounded-2xl shadow">
+              <p className="text-2xl font-bold text-blue-900">{v.name}</p>
+              <p className="text-xl font-mono mt-2 text-gray-700">{v.voterNo}</p>
+              <p className="mt-3 text-gray-600">{v.father}</p>
+              <p className="text-xs text-gray-400 mt-4">ফাইল: {v.pdfName}</p>
             </div>
           ))}
         </div>
@@ -149,4 +151,4 @@ export default function VoterSearch() {
       </div>
     </div>
   );
-}
+          }

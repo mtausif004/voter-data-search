@@ -29,56 +29,55 @@ export default function VoterSearch() {
 
   const processPDF = async (file: File) => {
     setIsProcessing(true);
-    setProgress(`প্রসেস হচ্ছে: ${file.name} (${(file.size/1024/1024).toFixed(1)} MB)`);
+    setProgress(`Tesseract OCR চলছে... ${file.name}`);
 
     try {
-      const pdfjs = await import('pdfjs-dist');
-      pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.76/pdf.worker.min.mjs`;
-
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+      // Tesseract.js লোড
+      const { createWorker } = await import('tesseract.js');
       
-      let fullText = '';
+      const worker = await createWorker(['ben', 'eng'], 1, {
+        logger: (m) => {
+          if (m.status === 'recognizing text') {
+            setProgress(`OCR চলছে... ${Math.round(m.progress * 100)}%`);
+          }
+        }
+      });
 
-      for (let i = 1; i <= pdf.numPages; i++) {
-        setProgress(`পেজ ${i} / ${pdf.numPages} প্রসেস হচ্ছে...`);
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        fullText += textContent.items.map((item: any) => (item.str || '')).join(' ') + '\n';
-      }
+      const { data: { text } } = await worker.recognize(file);
+      await worker.terminate();
 
-      // আরও শক্তিশালী পার্সিং
-      const lines = fullText.split('\n');
+      // টেক্সট পার্সিং
+      const lines = text.split('\n');
       const newVoters: Voter[] = [];
 
-      for (let line of lines) {
-        line = line.trim();
-        if (!line) continue;
+      lines.forEach((line, idx) => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
 
-        const nameMatch = line.match(/নাম[:\s]*([^\n\u0964]+)/i);
-        const voterNoMatch = line.match(/ভোটার নং[:\s]*([০-৯]+)/i);
+        const nameMatch = trimmed.match(/নাম[:\s]*([^\n\u0964]+)/i);
+        const voterNoMatch = trimmed.match(/ভোটার নং[:\s]*([০-৯]+)/i);
 
         if (nameMatch && nameMatch[1] && nameMatch[1].trim().length > 2) {
           newVoters.push({
-            id: Date.now() + Math.random().toString(),
+            id: Date.now() + '-' + idx,
             name: nameMatch[1].trim(),
             voterNo: voterNoMatch ? voterNoMatch[1] : 'N/A',
-            father: 'পিতা তথ্য পাওয়া যায়নি',
-            address: 'ঠিকানা পাওয়া যায়নি',
+            father: 'পিতা: তথ্য পাওয়া যায়নি',
+            address: 'ঠিকানা: তথ্য পাওয়া যায়নি',
             pdfName: file.name
           });
         }
-      }
+      });
 
       if (newVoters.length > 0) {
         setVoters(prev => [...prev, ...newVoters]);
-        setProgress(`✅ ${newVoters.length} জন ভোটার সফলভাবে যোগ হয়েছে`);
+        setProgress(`✅ সফল! ${newVoters.length} জন ভোটার যোগ হয়েছে`);
       } else {
-        setProgress('⚠️ কোনো তথ্য পাওয়া যায়নি। অন্য PDF চেষ্টা করুন বা ছবি ক্লিয়ার করে আপলোড করুন।');
+        setProgress('⚠️ কোনো তথ্য পাওয়া যায়নি। অন্য PDF চেষ্টা করুন।');
       }
     } catch (err) {
       console.error(err);
-      setProgress('❌ PDF প্রসেস করতে বড় সমস্যা হয়েছে। অন্য ছোট PDF চেষ্টা করুন।');
+      setProgress('❌ Tesseract OCR এ সমস্যা হয়েছে। আবার চেষ্টা করুন।');
     }
 
     setIsProcessing(false);
@@ -93,7 +92,7 @@ export default function VoterSearch() {
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold text-center mb-8 text-blue-800">
-          Live Voter Data Search
+          Live Voter Data Search (Tesseract OCR)
         </h1>
 
         <div className="bg-white rounded-2xl shadow p-8 text-center mb-8">
@@ -101,7 +100,7 @@ export default function VoterSearch() {
           <p className="mb-6 text-lg">ভোটার লিস্টের PDF আপলোড করুন</p>
           
           <label className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-10 py-5 rounded-xl text-lg inline-block">
-            📄 PDF আপলোড করুন
+            📄 PDF আপলোড করুন (Tesseract OCR)
             <input
               type="file"
               accept="application/pdf"
@@ -114,7 +113,11 @@ export default function VoterSearch() {
           </label>
         </div>
 
-        {isProcessing && <div className="bg-yellow-50 p-6 rounded-xl text-center mb-6 font-medium">{progress}</div>}
+        {isProcessing && (
+          <div className="bg-blue-50 p-6 rounded-xl text-center mb-6 font-medium">
+            {progress}
+          </div>
+        )}
 
         <div className="mb-6">
           <input
@@ -126,10 +129,10 @@ export default function VoterSearch() {
           />
         </div>
 
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between mb-6">
           <h2 className="text-xl font-semibold">মোট ভোটার: {voters.length}</h2>
           <button 
-            onClick={() => { if(confirm('সব ডাটা মুছে ফেলবেন?')) {setVoters([]); localStorage.clear();} }}
+            onClick={() => { if(confirm('সব মুছে ফেলবেন?')) {setVoters([]); localStorage.clear();} }}
             className="text-red-600 flex items-center gap-2"
           >
             <Trash2 /> সব মুছে ফেলুন
@@ -139,9 +142,9 @@ export default function VoterSearch() {
         <div className="space-y-4">
           {filtered.map(v => (
             <div key={v.id} className="bg-white p-6 rounded-2xl shadow">
-              <p className="text-2xl font-bold text-blue-900">{v.name}</p>
-              <p className="text-xl font-mono mt-2 text-gray-700">{v.voterNo}</p>
-              <p className="mt-3 text-gray-600">{v.father}</p>
+              <p className="text-2xl font-bold">{v.name}</p>
+              <p className="text-xl font-mono mt-2">{v.voterNo}</p>
+              <p className="text-gray-600 mt-3">{v.father}</p>
               <p className="text-xs text-gray-400 mt-4">ফাইল: {v.pdfName}</p>
             </div>
           ))}
@@ -151,4 +154,4 @@ export default function VoterSearch() {
       </div>
     </div>
   );
-          }
+}
